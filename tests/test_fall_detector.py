@@ -91,6 +91,19 @@ class FallDetectorIntegrationTests(unittest.TestCase):
         self.assertEqual(detector.alert_count, 1)
         self.assertTrue(detector.fall_detected)
 
+    def test_wide_upright_pose_is_not_labeled_horizontal(self):
+        detector = self.build_detector([(0.00, 100, 100, 90)])
+
+        with (
+            patch.object(fall_detector.time, "monotonic", return_value=0.00),
+            patch.object(fall_detector.cv2, "rectangle", return_value=None),
+            patch.object(fall_detector.cv2, "putText", return_value=None) as put_text,
+        ):
+            detector.detect(object())
+
+        labels = [call.args[1] for call in put_text.call_args_list]
+        self.assertNotIn("HORIZONTAL", labels)
+
     def test_slow_lie_down_does_not_alert_even_when_horizontal_persists(self):
         samples = [
             (0.00, 100, 50, 100),

@@ -28,7 +28,7 @@ pip3 install ultralytics opencv-python-headless
 | ค่าคงที่ | หน้าที่ | ค่าเริ่มต้น |
 |----------|---------|------------|
 | `PHONE_CAMERA_URL` | IP ของกล้อง (IP Webcam / Pi Cam stream) | `http://192.168.1.102:8080/video` |
-| `FALL_RATIO` | width/height ขั้นต่ำที่จะถือว่าเป็นท่าผ่าชิง | `1.2` |
+| `FALL_RATIO` | width/height ขั้นต่ำที่จะถือว่าเป็นท่าผ่าชิง | `1.3` |
 | `FALL_DROP_RATIO` | ต้องลดระดับลงอย่างน้อยกี่เท่าของความสูงร่างกาย | `0.35` |
 | `FALL_SPEED_RATIO` | ความเร็วต่ำสุด (body-heights/วินาที) | `0.55` |
 | `FALL_TRANSITION_WINDOW` | หน้าต่างเวลาย้อนหลังสำหรับ rapid descent (วินาที) | `1.0` |
@@ -134,8 +134,8 @@ falling-detect/
 ## รัน Tests
 
 ```bash
-cd /home/mean/tmp/falling-detect
-python3 -m unittest tests.test_fall_logic tests.test_fall_detector -v
+# รันจากโฟลเดอร์โปรเจกต์
+python3 -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 ## หมายเหตุ
