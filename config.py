@@ -3,6 +3,8 @@
 # ตั้งค่าระบบตรวจจับคนล้ม
 # ==========================================
 
+import os
+
 # -----------------------------
 # Camera
 # -----------------------------
@@ -62,3 +64,8 @@ FALL_RECOVERY_TIME = 0.50
 # เวลาระหว่างการแจ้งเตือนแต่ละครั้ง
 # หน่วยเป็นวินาที
 ALERT_COOLDOWN = 10
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_ALERT_MESSAGE = "⚠️ ตรวจพบการล้ม! กรุณาตรวจสอบทันที"
+TELEGRAM_TIMEOUT = 5

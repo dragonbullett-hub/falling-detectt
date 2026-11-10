@@ -3,12 +3,18 @@
 # YOLO Pose + Temporal Fall Detection
 # ==========================================
 
-import cv2
+import http.client
+import json
 import time
+import urllib.error
+import urllib.request
+
+import cv2
 
 from ultralytics import YOLO
 
 from config import (
+    ALERT_COOLDOWN,
     CONFIDENCE,
     FALL_RATIO,
     FALL_DROP_RATIO,
@@ -16,8 +22,43 @@ from config import (
     FALL_TRANSITION_WINDOW,
     FALL_HORIZONTAL_CONFIRM_TIME,
     FALL_RECOVERY_TIME,
+    TELEGRAM_ALERT_MESSAGE,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
+    TELEGRAM_TIMEOUT,
 )
 from fall_logic import FallTemporalClassifier
+
+
+def send_telegram_alert(
+    message: str = TELEGRAM_ALERT_MESSAGE,
+    bot_token: str | None = None,
+    chat_id: str | None = None,
+    timeout: float = TELEGRAM_TIMEOUT,
+) -> bool:
+    token = (TELEGRAM_BOT_TOKEN if bot_token is None else bot_token).strip()
+    target_chat_id = (TELEGRAM_CHAT_ID if chat_id is None else chat_id).strip()
+    if not token or not target_chat_id:
+        return False
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = json.dumps({"chat_id": target_chat_id, "text": message}).encode("utf-8")
+    try:
+        request = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=timeout):
+            return True
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as exc:
+        if isinstance(exc, urllib.error.HTTPError):
+            exc.close()
+        print(f"ไม่สามารถส่งแจ้งเตือน Telegram ได้: {type(exc).__name__}")
+
+        return False
+
 
 
 class FallDetector:
@@ -39,6 +80,7 @@ class FallDetector:
         )
 
         self.fall_detected = False
+        self.last_alert_time = None
 
 
     def detect(self, frame):
@@ -150,10 +192,20 @@ class FallDetector:
         return frame
 
 
-    def alert(self):
+    def alert(self) -> bool:
 
         print()
         print("================================")
         print("⚠️  ตรวจพบการล้ม!")
         print("================================")
         print()
+
+        now = time.monotonic()
+        if self.last_alert_time is not None and (now - self.last_alert_time) < ALERT_COOLDOWN:
+            return False
+
+        sent = send_telegram_alert()
+        if sent:
+            self.last_alert_time = now
+
+        return sent
