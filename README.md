@@ -36,6 +36,24 @@ pip3 install ultralytics opencv-python-headless
 | `FALL_RECOVERY_TIME` | ต้องกลับมายืนต่อเนื่องนานเท่าไรจึง reset event (วินาที) | `0.50` |
 | `CONFIDENCE` | ความมั่นใจขั้นต่ำของ YOLO | `0.5` |
 
+### แจ้งเตือนผ่าน Telegram
+
+สร้างบอตผ่าน BotFather แล้วเริ่มแชตกับบอตหรือเพิ่มบอตในกลุ่มที่ต้องการรับแจ้งเตือน จากนั้นตั้งค่า environment variable ก่อนรันโปรแกรม:
+
+```bash
+export TELEGRAM_BOT_TOKEN="<bot-token>"
+export TELEGRAM_CHAT_ID="<chat-id>"
+python3 main.py
+```
+
+ระบบอ่านค่าเมื่อเริ่มโปรแกรม หาก token หรือ chat ID ว่าง ระบบจะข้ามการส่ง Telegram แต่ยังแจ้งเตือนผ่าน console ตามเดิม
+
+- `TELEGRAM_ALERT_MESSAGE` ใน `config.py` กำหนดข้อความแจ้งเตือน
+- `ALERT_COOLDOWN` เว้นระยะอย่างน้อย 10 วินาทีระหว่างการส่งสำเร็จ การส่งที่ล้มเหลวจะไม่เริ่ม cooldown
+- `TELEGRAM_TIMEOUT` กำหนด network timeout เป็น 5 วินาที การส่งเป็น synchronous จึงพักลูปกล้องระหว่างรอเครือข่าย เมื่อเกิดข้อผิดพลาดที่รองรับ ระบบจะคืนการทำงานให้ลูปกล้อง
+
+เก็บ token ใน environment variable ไม่ใส่ข้อมูลรับรองจริงลงใน source code หรือ commit และเลือกเฉพาะแชตที่ได้รับอนุญาตให้รับข้อมูลเหตุการณ์
+
 ## วิธีใช้งาน
 
 ### วิธีที่ 1: ใช้ IP Webcam (โทรศัพท์ / Pi Cam เป็น HTTP stream)
