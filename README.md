@@ -12,13 +12,13 @@ sudo apt update
 sudo apt install -y python3-pip python3-opencv python3-picamera2
 
 # 2. ติดตั้ง dependencies
-pip3 install ultralytics opencv-python-headless
+pip3 install ultralytics opencv-python-headless truststore
 ```
 
 ### บน Desktop / Dev
 
 ```bash
-pip3 install ultralytics opencv-python-headless
+pip3 install ultralytics opencv-python-headless truststore
 ```
 
 ## การตั้งค่า
@@ -28,31 +28,33 @@ pip3 install ultralytics opencv-python-headless
 | ค่าคงที่ | หน้าที่ | ค่าเริ่มต้น |
 |----------|---------|------------|
 | `PHONE_CAMERA_URL` | IP ของกล้อง (IP Webcam / Pi Cam stream) | `http://192.168.1.102:8080/video` |
+| `INFERENCE_SKIP` | จำนวนเฟรมที่ข้ามระหว่าง YOLO inference | `0` |
+| `HEADLESS` | ปิดหน้าต่าง OpenCV; ตั้งด้วย environment variable `HEADLESS=1` | `false` |
 | `FALL_RATIO` | width/height ขั้นต่ำที่จะถือว่าเป็นท่าผ่าชิง | `1.3` |
-| `FALL_DROP_RATIO` | ต้องลดระดับลงอย่างน้อยกี่เท่าของความสูงร่างกาย | `0.35` |
-| `FALL_SPEED_RATIO` | ความเร็วต่ำสุด (body-heights/วินาที) | `0.55` |
+| `FALL_DROP_RATIO` | ต้องลดระดับลงอย่างน้อยกี่เท่าของความสูงร่างกาย | `0.20` |
+| `FALL_SPEED_RATIO` | ความเร็วต่ำสุด (body-heights/วินาที) | `0.30` |
 | `FALL_TRANSITION_WINDOW` | หน้าต่างเวลาย้อนหลังสำหรับ rapid descent (วินาที) | `1.0` |
-| `FALL_HORIZONTAL_CONFIRM_TIME` | ต้องอยู่ horizontal นาน enough ก่อนยืนยัน (วินาที) | `0.20` |
+| `FALL_HORIZONTAL_CONFIRM_TIME` | ต้องอยู่ horizontal นาน enough ก่อนยืนยัน (วินาที) | `0.15` |
 | `FALL_RECOVERY_TIME` | ต้องกลับมายืนต่อเนื่องนานเท่าไรจึง reset event (วินาที) | `0.50` |
 | `CONFIDENCE` | ความมั่นใจขั้นต่ำของ YOLO | `0.5` |
 
 ### แจ้งเตือนผ่าน Telegram
 
-สร้างบอตผ่าน BotFather แล้วเริ่มแชตกับบอตหรือเพิ่มบอตในกลุ่มที่ต้องการรับแจ้งเตือน จากนั้นตั้งค่า environment variable ก่อนรันโปรแกรม:
+สร้างบอตผ่าน BotFather แล้วเริ่มแชตกับบอตหรือเพิ่มบอตในกลุ่มที่ต้องการรับแจ้งเตือน จากนั้นเติมค่าใน `.env`:
 
-```bash
-export TELEGRAM_BOT_TOKEN="<bot-token>"
-export TELEGRAM_CHAT_ID="<chat-id>"
-python3 main.py
+```dotenv
+TELEGRAM_BOT_TOKEN="<bot-token>"
+TELEGRAM_CHAT_ID="<chat-id>"
 ```
 
 ระบบอ่านค่าเมื่อเริ่มโปรแกรม หาก token หรือ chat ID ว่าง ระบบจะข้ามการส่ง Telegram แต่ยังแจ้งเตือนผ่าน console ตามเดิม
 
 - `TELEGRAM_ALERT_MESSAGE` ใน `config.py` กำหนดข้อความแจ้งเตือน
 - `ALERT_COOLDOWN` เว้นระยะอย่างน้อย 10 วินาทีระหว่างการส่งสำเร็จ การส่งที่ล้มเหลวจะไม่เริ่ม cooldown
+- เมื่อยืนยันการล้ม ระบบส่งภาพ JPEG ของเฟรมเหตุการณ์พร้อมข้อความไปยัง Telegram
 - `TELEGRAM_TIMEOUT` กำหนด network timeout เป็น 5 วินาที การส่งเป็น synchronous จึงพักลูปกล้องระหว่างรอเครือข่าย เมื่อเกิดข้อผิดพลาดที่รองรับ ระบบจะคืนการทำงานให้ลูปกล้อง
 
-เก็บ token ใน environment variable ไม่ใส่ข้อมูลรับรองจริงลงใน source code หรือ commit และเลือกเฉพาะแชตที่ได้รับอนุญาตให้รับข้อมูลเหตุการณ์
+`.env` ถูก ignore โดย Git และ `config.py` จะอ่านเมื่อเริ่มโปรแกรม; ไม่ใส่ข้อมูลรับรองจริงลงใน source code หรือ commit และเลือกเฉพาะแชตที่ได้รับอนุญาตให้รับข้อมูลเหตุการณ์
 
 ## วิธีใช้งาน
 
@@ -85,14 +87,14 @@ python3 main.py
    - ปรับลด `CONFIDENCE` เป็น `0.4` เพื่อให้ detect เร็วขึ้น
    - ใช้ ONNX Runtime: ดูหัวข้อ `Optimization` ด้านล่าง
 
-2. **FPS ต่ำ** — เพิ่ม `INFERENCE_SKIP = 1` ใน `config.py` (skip เฟรม):
+2. **FPS ต่ำ** — ตั้ง `INFERENCE_SKIP` ใน `config.py`:
    ```python
    INFERENCE_SKIP = 1  # ประมวลผลทุก 2 เฟรม
    ```
 
-3. **ไม่มี display** — รันแบบ headless:
+3. **ไม่มี display** — ตั้ง `HEADLESS=1` ก่อนรัน เพื่อไม่เรียก OpenCV GUI:
    ```bash
-   python3 main.py 2>&1 | tee fall.log
+   HEADLESS=1 python3 main.py 2>&1 | tee fall.log
    ```
 
 ## Optimization

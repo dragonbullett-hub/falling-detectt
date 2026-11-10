@@ -5,6 +5,8 @@
 
 import cv2
 
+from config import HEADLESS, INFERENCE_SKIP
+
 from camera import Camera
 from fall_detector import FallDetector
 
@@ -42,13 +44,16 @@ def main():
 
     print()
     print("ระบบพร้อมใช้งาน")
-    print("กด Q เพื่อออก")
+    if not HEADLESS:
+        print("กด Q เพื่อออก")
     print()
 
 
     # ======================================
     # Main Loop
     # ======================================
+
+    frame_count = 0
 
     while True:
 
@@ -64,12 +69,9 @@ def main():
 
             break
 
-
-        # ----------------------------------
-        # ส่งภาพไปตรวจจับ
-        # ----------------------------------
-
-        frame = detector.detect(frame)
+        frame_count += 1
+        if frame_count % (INFERENCE_SKIP + 1) == 0:
+            frame = detector.detect(frame)
 
 
         # ----------------------------------
@@ -102,25 +104,15 @@ def main():
 
 
         # ----------------------------------
-        # แสดงหน้าต่าง
-        # ----------------------------------
+        if not HEADLESS:
+            cv2.imshow(
+                "Fall Detection - Phone Camera",
+                frame
+            )
 
-        cv2.imshow(
-            "Fall Detection - Phone Camera",
-            frame
-        )
-
-
-        # ----------------------------------
-        # กด Q เพื่อออก
-        # ----------------------------------
-
-        key = cv2.waitKey(1) & 0xFF
-
-
-        if key == ord("q"):
-
-            break
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
+                break
 
 
     # ======================================
@@ -129,7 +121,8 @@ def main():
 
     camera.release()
 
-    cv2.destroyAllWindows()
+    if not HEADLESS:
+        cv2.destroyAllWindows()
 
     print()
     print("ปิดระบบเรียบร้อย")

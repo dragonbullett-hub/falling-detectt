@@ -5,6 +5,7 @@
 
 import http.client
 import json
+import secrets
 import time
 import urllib.error
 import urllib.request
@@ -35,19 +36,59 @@ def send_telegram_alert(
     bot_token: str | None = None,
     chat_id: str | None = None,
     timeout: float = TELEGRAM_TIMEOUT,
+    frame=None,
 ) -> bool:
-    token = (TELEGRAM_BOT_TOKEN if bot_token is None else bot_token).strip()
-    target_chat_id = (TELEGRAM_CHAT_ID if chat_id is None else chat_id).strip()
+    token = (TELEGRAM_BOT_TOKEN if bot_token is None else bot_token) or ""
+    target_chat_id = (TELEGRAM_CHAT_ID if chat_id is None else chat_id) or ""
+    token = token.strip()
+    target_chat_id = target_chat_id.strip()
     if not token or not target_chat_id:
         return False
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = json.dumps({"chat_id": target_chat_id, "text": message}).encode("utf-8")
+    if frame is None:
+        endpoint = "sendMessage"
+        payload = json.dumps({"chat_id": target_chat_id, "text": message}).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+    else:
+        try:
+            encoded, image = cv2.imencode(".jpg", frame)
+        except Exception:
+            encoded = False
+
+        if not encoded:
+            print("ไม่สามารถบันทึกภาพแจ้งเตือน Telegram ได้")
+            return send_telegram_alert(
+                message=message,
+                bot_token=token,
+                chat_id=target_chat_id,
+                timeout=timeout,
+            )
+
+        endpoint = "sendPhoto"
+        boundary = f"----fall-detection-{secrets.token_hex(16)}"
+        payload = b"".join((
+            (
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="chat_id"\r\n\r\n'
+                f"{target_chat_id}\r\n"
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="caption"\r\n\r\n'
+                f"{message}\r\n"
+                f"--{boundary}\r\n"
+                'Content-Disposition: form-data; name="photo"; filename="fall.jpg"\r\n'
+                "Content-Type: image/jpeg\r\n\r\n"
+            ).encode("utf-8"),
+            image.tobytes(),
+            f"\r\n--{boundary}--\r\n".encode("utf-8"),
+        ))
+        headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+
+    url = f"https://api.telegram.org/bot{token}/{endpoint}"
     try:
         request = urllib.request.Request(
             url,
             data=payload,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(request, timeout=timeout):
@@ -146,20 +187,20 @@ class FallDetector:
         # PR 1 keeps detection single-subject: the largest visible pose is the
         # primary subject. Stable multi-person tracking remains out of scope.
         primary_pose = max(poses, key=lambda pose: pose["area"], default=None)
-
+        timestamp = time.monotonic()
         event_detected = False
 
         if primary_pose is not None:
             event_detected = self.classifier.update(
-                timestamp=time.monotonic(),
+                timestamp=timestamp,
                 center_y=primary_pose["center_y"],
                 body_height=primary_pose["height"],
                 horizontal=primary_pose["horizontal"],
             )
-            self.fall_detected = self.classifier.active
         else:
-            self.fall_detected = self.classifier.active
+            self.classifier.update_missing(timestamp=timestamp)
 
+        self.fall_detected = self.classifier.active
         for pose in poses:
             x1 = int(pose["min_x"])
             y1 = int(pose["min_y"])
@@ -185,15 +226,12 @@ class FallDetector:
                     color,
                     3,
                 )
-
         if event_detected:
-            self.alert()
+            self.alert(frame)
 
         return frame
 
-
-    def alert(self) -> bool:
-
+    def alert(self, frame=None) -> bool:
         print()
         print("================================")
         print("⚠️  ตรวจพบการล้ม!")
@@ -204,7 +242,7 @@ class FallDetector:
         if self.last_alert_time is not None and (now - self.last_alert_time) < ALERT_COOLDOWN:
             return False
 
-        sent = send_telegram_alert()
+        sent = send_telegram_alert(frame=frame)
         if sent:
             self.last_alert_time = now
 

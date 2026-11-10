@@ -68,6 +68,22 @@ class FallTemporalClassifier:
 
         return False
 
+    def update_missing(self, *, timestamp):
+        self.history.clear()
+        self.horizontal_since = None
+        self.rapid_transition_seen = False
+
+        if not self.active:
+            return
+
+        if self.recovery_since is None:
+            self.recovery_since = timestamp
+            return
+
+        if timestamp - self.recovery_since >= self.recovery_time:
+            self.active = False
+            self.recovery_since = None
+
     def _trim_history(self, timestamp):
         keep_after = timestamp - self.transition_window
         while self.history and self.history[0].timestamp < keep_after:

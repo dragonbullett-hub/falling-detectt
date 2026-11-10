@@ -63,7 +63,7 @@ class FallDetectorIntegrationTests(unittest.TestCase):
         with patch.object(fall_detector, "YOLO", return_value=model):
             detector = fall_detector.FallDetector()
         detector.alert_count = 0
-        detector.alert = lambda: setattr(detector, "alert_count", detector.alert_count + 1)
+        detector.alert = lambda frame: setattr(detector, "alert_count", detector.alert_count + 1)
         return detector
 
     def run_samples(self, samples):
@@ -104,6 +104,15 @@ class FallDetectorIntegrationTests(unittest.TestCase):
         labels = [call.args[1] for call in put_text.call_args_list]
         self.assertNotIn("HORIZONTAL", labels)
 
+    def test_balanced_thresholds_detect_moderate_drop(self):
+        detector = self.run_samples([
+            (0.00, 100, 50, 100),
+            (0.30, 110, 55, 90),
+            (0.55, 122, 120, 85),
+            (0.75, 125, 120, 85),
+        ])
+        self.assertEqual(detector.alert_count, 1)
+        self.assertTrue(detector.fall_detected)
     def test_slow_lie_down_does_not_alert_even_when_horizontal_persists(self):
         samples = [
             (0.00, 100, 50, 100),
@@ -117,6 +126,34 @@ class FallDetectorIntegrationTests(unittest.TestCase):
         )
         detector = self.run_samples(samples)
         self.assertEqual(detector.alert_count, 0)
+        self.assertFalse(detector.fall_detected)
+
+    def test_missing_pose_clears_fall_after_recovery_time(self):
+        frames = [
+            [pose(100, 50, 100)],
+            [pose(105, 50, 100)],
+            [pose(125, 55, 90)],
+            [pose(145, 100, 50)],
+            [pose(148, 100, 50)],
+            [],
+            [],
+        ]
+        with patch.object(fall_detector, "YOLO", return_value=FakeModel(frames)):
+            detector = fall_detector.FallDetector()
+        detector.alert = lambda frame: None
+
+        with (
+            patch.object(
+                fall_detector.time,
+                "monotonic",
+                side_effect=[0.00, 0.20, 0.40, 0.55, 0.80, 1.00, 1.60],
+            ),
+            patch.object(fall_detector.cv2, "rectangle", return_value=None),
+            patch.object(fall_detector.cv2, "putText", return_value=None),
+        ):
+            for _ in frames:
+                detector.detect(object())
+
         self.assertFalse(detector.fall_detected)
 
     def test_alert_sends_telegram_message_when_configured(self):
@@ -139,6 +176,37 @@ class FallDetectorIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(request.get_header("Content-type"), "application/json")
         self.assertEqual(urlopen.call_args.kwargs, {"timeout": 5})
+
+    def test_alert_sends_fall_snapshot_when_frame_is_available(self):
+        class EncodedImage:
+            def tobytes(self):
+                return b"jpeg-bytes"
+
+        with (
+            patch.object(fall_detector, "TELEGRAM_BOT_TOKEN", "123456:ABCDEF"),
+            patch.object(fall_detector, "TELEGRAM_CHAT_ID", "987654321"),
+            patch.object(
+                fall_detector.cv2,
+                "imencode",
+                return_value=(True, EncodedImage()),
+                create=True,
+            ),
+            patch.object(fall_detector.urllib.request, "urlopen") as urlopen,
+        ):
+            self.assertTrue(fall_detector.send_telegram_alert(frame=object()))
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(
+            request.full_url,
+            "https://api.telegram.org/bot123456:ABCDEF/sendPhoto",
+        )
+        self.assertTrue(
+            request.get_header("Content-type").startswith("multipart/form-data; boundary=")
+        )
+        self.assertIn(b'name="chat_id"', request.data)
+        self.assertIn(b'name="caption"', request.data)
+        self.assertIn(b'name="photo"; filename="fall.jpg"', request.data)
+        self.assertIn(b"jpeg-bytes", request.data)
 
     def test_alert_respects_cooldown_between_telegram_sends(self):
         with (
@@ -177,6 +245,18 @@ class FallDetectorIntegrationTests(unittest.TestCase):
                     self.assertFalse(detector.alert())
                     self.assertIsNone(detector.last_alert_time)
                     urlopen.assert_not_called()
+
+    def test_alert_skips_none_credentials(self):
+        with (
+            patch.object(fall_detector, "YOLO"),
+            patch.object(fall_detector, "TELEGRAM_BOT_TOKEN", None),
+            patch.object(fall_detector, "TELEGRAM_CHAT_ID", None),
+            patch.object(fall_detector.urllib.request, "urlopen") as urlopen,
+        ):
+            detector = fall_detector.FallDetector()
+            self.assertFalse(detector.alert())
+            self.assertIsNone(detector.last_alert_time)
+            urlopen.assert_not_called()
 
     def test_alert_handles_network_error_without_raising(self):
         errors = [
